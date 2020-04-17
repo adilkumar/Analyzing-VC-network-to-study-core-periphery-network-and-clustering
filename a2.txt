@@ -1,0 +1,396 @@
+library(igraph)
+library(tidyverse)
+library(data.table)
+library(readxl)
+rm(list=ls())
+
+# reading in data
+setwd("C:/Users/Adil Ashish Kumar/Desktop/673 - Social Network/A2")
+data1 = fread("Funding_events_7.14.csv", header = TRUE)
+data2 = read_excel("Funding_events_7.14_page2.xlsx")
+
+data2 = as.data.frame(data2)
+data1 = as.data.frame(data1)
+
+data3= data1
+
+names(data3) = gsub(" ", "_", names(data3))
+data3$Month_Yr = format(as.Date(data3$Deal_Date, format = "%m/%d/%y"), "%m-%Y")
+
+fil =c("Month_Yr","Investors")
+data4=data3[fil]
+
+new= NULL
+temp=NULL
+final=NULL
+
+data5=data4
+#data5= data4[data4$Month_Yr %in% c("06-1981","06-1982","03-1983","04-1983"),]
+for (i in 1:nrow(data5))
+{
+  df2 <- data5[i,]
+  foo2 <- data.frame(do.call('rbind', strsplit(as.character(df2$Investors),',',fixed=TRUE)))
+  a=t(foo2)
+  a=as.vector(a)
+  if(length(a)>1)
+  {
+  c=combn(a, 2, FUN = NULL, simplify = TRUE)
+  new=NULL
+  for (j in 1:ncol(c))
+  {
+    g=c[,j]
+    g=as.data.frame(g)
+    f= t(g)
+    f=as.data.frame(f)
+    
+    new = rbind(new,f)
+  }
+  
+  temp = new
+  temp$d= df2$Month_Yr
+  final= rbind(temp,final)
+  }
+}
+
+
+op = final
+op2 = na.omit(op)
+
+
+#second dataset
+
+data3a=data2
+names(data3a) = gsub(" ", "_", names(data3a))
+data3a$Month_Yr = format(as.Date(data3a$Deal_Date, format = "%y/%m/%d"), "%m-%Y")
+
+data4a=data3a[fil]
+
+new= NULL
+temp=NULL
+final=NULL
+
+data5a=data4a
+#data5= data4[data4$Month_Yr %in% c("06-1981","06-1982","03-1983","04-1983"),]
+for (i in 1:nrow(data5a))
+{
+  df2 <- data5a[i,]
+  foo2 <- data.frame(do.call('rbind', strsplit(as.character(df2$Investors),',',fixed=TRUE)))
+  a=t(foo2)
+  a=as.vector(a)
+  if(length(a)>1)
+  {
+    c=combn(a, 2, FUN = NULL, simplify = TRUE)
+    new=NULL
+    for (j in 1:ncol(c))
+    {
+      g=c[,j]
+      g=as.data.frame(g)
+      f= t(g)
+      f=as.data.frame(f)
+      
+      new = rbind(new,f)
+    }
+    
+    temp = new
+    temp$d= df2$Month_Yr
+    final= rbind(temp,final)
+  }
+}
+
+opa = final
+
+#combining both
+
+elist= rbind(op2,opa)
+
+
+elist$V1 = trimws(elist$V1)
+elist$V2 = trimws(elist$V2)
+elist2= elist
+elist2 = unique(elist2)
+
+elist2 = elist2[!(elist2$V1=="Inc" | elist2$V1=="Inc." | elist2$V1=="LTD" | elist2$V1=="Ltd."), ]
+elist2 = elist2[!(elist2$V2=="Inc" | elist2$V2=="Inc." | elist2$V2=="LTD" | elist2$V2=="Ltd."), ]
+
+comblist= elist2
+comblist$d=NULL
+#comblist=unique(comblist)
+rownames(comblist) <- c()
+
+
+gr1 = graph.data.frame(comblist, directed=FALSE)
+
+closeness.cent = closeness(gr1)
+max(closeness.cent)
+
+cl=as.data.frame(closeness.cent)
+cl$names <- rownames(cl)
+#Q1A
+cl[cl$closeness.cent == max(cl$closeness.cent),]
+
+#Q1B
+npl = distances(gr1, v = V(gr1), to=V(gr1))
+npl[npl==Inf] = dim(npl)[2]
+average = colMeans(npl)
+avg_dist_firm = apply(npl, 1, mean)
+which.min(average)
+# Q1C
+pl = mean_distance(gr1, unconnected = TRUE)
+
+#Q2 starts
+
+seqd=seq(as.Date("1981-6-1"), as.Date("2014-7-1"), by = "months")
+seqd = format(as.Date(seqd, format = "%y-%m-%d"), "%m-%Y")
+
+map=NULL
+map$d= seqd
+map$index =  0:397
+map = as.data.frame(map)
+
+elist3 = elist2
+
+elist3$d =as.Date(paste(elist3$d,'-01',sep=""), format = "%m-%Y-%d")
+map$d =as.Date(paste(map$d,'-01',sep=""), format = "%m-%Y-%d")
+
+
+elist3_sort = left_join(elist3,map)
+
+elist4 = elist3_sort
+elist4$d=NULL
+
+maxmth = max(elist4$index)
+
+elist4 = as.data.table(elist4)
+listofgr= lapply(1:maxmth, function(x) elist4[elist4$index< x])
+
+
+mthgr <- lapply(seq_along(listofgr), function(x) graph.data.frame(listofgr[[x]][,-1], directed=FALSE))
+
+mthcoreness = lapply(1:maxmth,function(x)mean(coreness(mthgr[[x]])))
+
+coreness_plot <- unlist(mthcoreness)
+
+coreness_plot <- as.data.frame(coreness_plot)
+coreness_plot$Mth <- 1:maxmth
+
+plot(coreness_plot$Mth,coreness_plot$coreness_plot,type="l")
+#Q2A
+
+
+#Q2B
+mthgr2 =  mthgr
+
+gr_un = lapply(seq_along(mthgr2), function(i) igraph::simplify(mthgr2[[i]], remove.multiple = TRUE,remove.loops=TRUE))  
+
+mthcore2 <- lapply(1:maxmth,function(x)mean(coreness(gr_un[[x]])))
+
+coreness_plot2 <- unlist(mthcore2)
+coreness_plot2 <- as.data.frame(coreness_plot2 )
+coreness_plot2$Mth <- 1:maxmth
+
+plot(coreness_plot2$Mth,coreness_plot2$coreness_plot,type="l")
+
+###Q2c
+
+
+e5 = elist3_sort
+
+e5$c = paste0(e5$V1,"++",e5$V2)
+
+e6= e5
+fil2 = c("c","d")
+
+e6 = e6[fil2]
+
+list = unique(e6$c)
+temp1= NULL
+temp2=NULL
+#list = list[1:10]
+for(i in 1: length(list))
+{
+e7 = e6[e6$c == list[i],]
+out = e7[(order(as.Date(e7$d))),]
+
+out2=out %>% 
+  group_by(c) %>% 
+  mutate(time = d - lag(d))
+
+out2 = as.data.frame(out2)
+out2$time2 = shift(out2$time,-1)
+out2 = as.data.frame(out2)
+out2$flag = ifelse(out2$time2>1825,1,0)
+
+temp1 = out2
+temp2 = rbind(temp1,temp2)
+}
+
+opc = temp2
+opc$flag[is.na(opc$flag)] <- 0
+opc2 = opc[opc$flag!=1,]
+
+opc2$flag=NULL
+opc2$time=NULL
+opc2$time2=NULL
+
+library(splitstackshape)
+opc3 = cSplit(opc2, "c", "++")
+
+
+
+opc4=opc3
+opc4$d =as.Date(opc4$d)
+
+opc_sort = left_join(opc4,map)
+
+opc1_sort = opc_sort
+opc1_sort$d=NULL
+opc1_sort$c_3=NULL
+
+maxmth2 = max(opc1_sort$index)
+
+opc1_sort = as.data.table(opc1_sort)
+
+listofgr2= lapply(1:maxmth2, function(x) opc1_sort[opc1_sort$index< x])
+# list of data tables, 1 for each moth
+
+
+mthgr2 <- lapply(seq_along(listofgr2), function(x) graph.data.frame(listofgr2[[x]][,-1], directed=FALSE))
+#converting to graphs
+
+mthcoreness2 = lapply(1:maxmth2,function(x)mean(coreness(mthgr2[[x]])))
+#coreness by graph
+
+coreness_plot2<- unlist(mthcoreness2)
+# list to vector
+
+coreness_plot2 <- as.data.frame(coreness_plot2)
+coreness_plot2$Mth <- 1:maxmth2
+
+plot(coreness_plot2$Mth,coreness_plot2$coreness_plot,type="l")
+
+#Q3B
+
+mthgr2[[50]]
+
+hist(coreness(mthgr2[[125]]))
+hist(coreness(mthgr2[[180]]))
+     hist(coreness(mthgr2[[220]]))
+          hist(coreness(mthgr2[[310]]))
+               hist(coreness(mthgr2[[370]]))
+               
+               
+               mean(coreness(mthgr2[[125]]))
+               mean(coreness(mthgr2[[180]]))
+               mean(coreness(mthgr2[[220]]))
+               mean(coreness(mthgr2[[310]]))
+               mean(coreness(mthgr2[[370]]))
+               
+               
+               hist(closeness(mthgr2[[125]]))
+               hist(closeness(mthgr2[[180]]))
+               hist(closeness(mthgr2[[220]]))
+               hist(closeness(mthgr2[[310]]))
+               hist(closeness(mthgr2[[370]]))
+               
+               mean(closeness(mthgr2[[125]]))
+               mean(closeness(mthgr2[[180]]))
+               mean(closeness(mthgr2[[220]]))
+               mean(closeness(mthgr2[[310]]))
+               mean(closeness(mthgr2[[370]]))
+
+
+               
+outcomes = fread("Venture_capital_firm_outcomes.csv", head = TRUE)
+               
+               getNetStats=function(net)
+               {
+                 deg_in = degree(net, mode = "in")
+                 deg_out = degree(net, mode = "out")
+                 close= closeness(net, mode = "total")
+                 betw = betweenness(net)
+                 prank = page_rank(net)$vector # page_rank creates a list object with some other items in it, we just want the actual scores, which are contained in the object called "vector"
+                 id=V(net)$name
+                 stats= as.data.table(list(id = id, deg_in = deg_in, deg_out = deg_out, close = close, betw = betw, prank = prank))
+                 return(stats)
+               }
+               
+               
+               
+               #Q4
+               e1 = elist2
+               e1a = cSplit(e1, "d", "-")
+               e1a=e1a[e1a$d_2==2014,]
+               e1a$d_1 =NULL
+               e1a$d_2 = NULL
+               
+               gr2014 = graph.data.frame(e1a, directed=FALSE)
+               
+               measures = getNetStats(gr2014)
+               
+              o14 = outcomes[outcomes$year==2014,] 
+               cor(o14$successful_investments,measures$close) 
+               
+               
+               measures <- subset(measures, !grepl('^\\d+$', measures$id))
+               
+               #make name consistent so we can merge/join the two files together
+               colnames(measures)[colnames(measures)=="id"] <- "firm_name"
+               
+               measures_final <- merge.data.frame(measures,outcomes,by=c("firm_name"))
+               
+               
+               
+               cor(measures_final$successful_investments,measures_final$close)
+               cor(measures_final$successful_investments,measures_final$betw)
+               cor(measures_final$successful_investments,measures_final$deg_in)
+               cor(measures_final$successful_investments,measures_final$deg_out)
+               
+               
+               
+               
+               #Q4B
+               
+               
+               
+               
+               #Q4
+               e1 = elist2
+               e1a = cSplit(e1, "d", "-")
+               e1a=e1a[e1a$d_2==2001,]
+               e1a$d_1 =NULL
+               e1a$d_2 = NULL
+               
+               gr2014 = graph.data.frame(e1a, directed=FALSE)
+               
+               measures = getNetStats(gr2014)
+               
+               o14 = outcomes[outcomes$year==2014,] 
+               cor(o14$successful_investments,measures$close) 
+               
+               
+               measures <- subset(measures, !grepl('^\\d+$', measures$id))
+               
+               #make name consistent so we can merge/join the two files together
+               colnames(measures)[colnames(measures)=="id"] <- "firm_name"
+               
+               measures_final <- merge.data.frame(measures,outcomes,by=c("firm_name"))
+               
+               
+               
+               cor(measures_final$out_of_business,measures_final$close)
+               cor(measures_final$out_of_business,measures_final$betw)
+               cor(measures_final$out_of_business,measures_final$deg_in)
+               cor(measures_final$out_of_business,measures_final$deg_out)
+               
+               
+               
+               cor(measures_final$out_of_business,measures_final$close)
+               cor(measures_final$out_of_business,measures_final$betw)
+               cor(measures_final$out_of_business,measures_final$deg_in)
+               cor(measures_final$out_of_business,measures_final$deg_out)
+               
+               
+               
+               
+               
+               
